@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::net::TcpListener;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use actix::{Actor, Addr, Supervisor, SystemRegistry};
 use actix_rt::System;
@@ -18,11 +18,16 @@ use crate::protocols::swim::http_client;
 use crate::protocols::swim::http_client::JoinRequest;
 use crate::protocols::swim::messages::{Address, ContactAddr};
 use crate::protocols::swim::swim::{Node, SwimActor};
+use crate::protocols::gossip::gossip::Gossip;
 
-pub struct Net {
+pub struct Inner {
     pub settings: Settings,
     pub http_client: http_client::Client,
     pub me: Node,
+}
+
+pub struct Net {
+    pub gossip: Gossip
 }
 
 impl Net {
@@ -42,7 +47,7 @@ impl Net {
         let contact_addr = nat.find_addr(&true, &settings.app_port);
         let node = Node {
             addr: contact_addr,
-            members: Mutex::new(vec![]),
+            members: RwLock::new(vec![]),
         };
 
         // create server instance
@@ -74,7 +79,8 @@ impl Net {
         let me = self.me.addr.0.clone();
         if me == known_node_addr {
             debug!("I'm boostrap node, starting network");
-            self.me.members.lock().unwrap().push(ContactAddr(known_node_addr.clone()));
+            // self.me.members.
+            self.me.members.write().unwrap().push(ContactAddr(known_node_addr.clone()));
             return Ok(());
         }
 
@@ -97,6 +103,7 @@ impl Net {
                 .service(health)
                 .service(echo)
                 .service(crate::protocols::swim::routes::join)
+                .service(crate::protocols::swim::routes::membership)
         })
             .listen(listener)?
             .run();

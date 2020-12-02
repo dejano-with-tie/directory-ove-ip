@@ -23,7 +23,7 @@ pub struct JoinResponse {
 }
 
 pub struct Client {
-    http: reqwest::Client
+    pub http: reqwest::Client
 }
 
 struct Handler<F>
@@ -59,37 +59,44 @@ impl Client {
         }
     }
 
-    pub async fn join(
+    pub async fn join<'a>(
         &self,
         payload: &JoinRequest,
         destination: &ContactAddr,
-    ) -> Result<ConsumableResponse<JoinResponse>, crate::protocols::Error> {
+    ) -> Result<ConsumableResponse<'a, Vec<ContactAddr>>, crate::protocols::Error> {
         debug!("[HTTP Request] Joining network over known node {}", destination);
-        let r = self.http.post(&format!("http://{}/join", destination))
+        let endpoint = "join";
+        let r = self.http.post(&format!("http://{}/{}", destination, endpoint))
             .header("Content-Type", "Application/json")
             .json(payload)
             .send()
             .await?
-            .text()
+            .json::<Vec<ContactAddr>>()
             .await?;
         debug!("[HTTP Response] {:?}", r);
-        Ok(ConsumableResponse { r: JoinResponse { members: vec![] } })
-        // Ok(r)
+        Ok(ConsumableResponse { body: r, endpoint })
     }
 }
 
-pub struct ConsumableResponse<T> {
-    pub r: T
+pub struct ConsumableResponse<'a, T> {
+    pub body: T,
+    pub endpoint: &'a str,
 }
 
-
-impl ConsumableResponse<JoinResponse> {
+impl<'a> ConsumableResponse<'a, Vec<ContactAddr>> {
     pub fn consume(&mut self, node: &mut Node) -> Node {
-        {
-            let mut members = node.members.lock().unwrap();
-            members.append(&mut self.r.members);
-            debug!("Network members: {:?}", *members);
+        match self.endpoint {
+            "join" => {
+                {
+                    let mut members = node.members.write().unwrap();
+                    members.append(&mut self.body);
+                    debug!("Network members: {:?}", *members);
+                }
+                std::mem::take(node)
+            }
+            _ => {
+                panic!("Unknown endpoint");
+            }
         }
-        std::mem::take(node)
     }
 }

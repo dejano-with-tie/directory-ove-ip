@@ -3,7 +3,7 @@ use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
 use std::net::{SocketAddr, ToSocketAddrs};
-use std::sync::Mutex;
+use std::sync::{Mutex, RwLock};
 
 use actix::prelude::*;
 use log::debug;
@@ -19,7 +19,7 @@ use crate::protocols::swim::http_client;
 #[derive(Default)]
 pub struct Node {
     pub addr: ContactAddr,
-    pub members: Mutex<Vec<ContactAddr>>,
+    pub members: RwLock<Vec<ContactAddr>>,
 }
 
 #[derive(Default)]

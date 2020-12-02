@@ -1,45 +1,48 @@
+use rand::prelude::ThreadRng;
 use rand::Rng;
 use tokio::time::Duration;
 
 use crate::protocols::swim::swim::*;
-
-pub trait GossipMessage {
-    fn payload(self: &Self) -> String;
-    fn id(self: &Self) -> Message;
-}
-
-impl GossipMessage for JoinRequest {
-    fn payload(&self) -> String {
-        self.contact_addr.clone()
-    }
-
-    fn id(&self) -> Message {
-        Message::Join
-    }
-}
+use crate::protocols::swim::http_client::Client;
 
 #[derive(Debug)]
-pub enum Message {
-    Join
+pub enum GossipMessage {
+    // TODO: Need generic way for second param (payload)
+    Join(&'static str, String)
 }
 
-pub struct Gossip;
+pub struct Gossip {
+    pub select_strategy: Box<dyn SelectStrategy>,
+    pub how_many: u16,
+    pub http: Client
+}
+
+pub trait SelectStrategy {
+    fn select(&self, nodes: &Vec<ContactAddr>, how_many: u16) -> Vec<&ContactAddr>;
+}
+
+pub struct RandomSelectStrategy(pub ThreadRng);
+
+impl SelectStrategy for RandomSelectStrategy {
+    fn select(&mut self, nodes: &Vec<ContactAddr>, how_many: u16) -> Vec<&ContactAddr> {
+        (0..how_many)
+            .map(|_i| nodes.get(self.0.gen_range(0, nodes.len())).unwrap())
+            .collect()
+    }
+}
 
 impl Gossip {
     /// nodes to which gossip message will be sent
-    pub fn pick(how_many: &u32, members: &Vec<String>) -> Vec<String> {
-        let mut picked = vec![];
-        for i in 0..*how_many {
-            let mut rng = rand::thread_rng();
-            picked.push(members.get(rng.gen_range(0, members.len())).unwrap().clone());
-        }
-
-        picked
+    pub async fn gossip(&self, message: &GossipMessage, nodes: &Vec<ContactAddr>) -> () {
+        self.select_strategy.select(nodes, self.how_many)
+            .iter()
+            .for_each(|&member| self.send(message, member).await);
     }
 
-    pub async fn send<T: GossipMessage>(message: T, members: &Vec<String>) {
+    pub async fn send(&self, message: &GossipMessage, member: &ContactAddr) {
         tokio::time::delay_for(Duration::from_secs(4)).await;
-        println!("gossip about {:?}: {}", message.id(), message.payload());
-        tokio::spawn(async move {});
+        members.iter().for_each(|m| {
+            println!("gossip -> [{:?}] about: {}", &message, (*m).0);
+        })
     }
 }

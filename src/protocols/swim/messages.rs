@@ -1,4 +1,5 @@
 use std::ops::Deref;
+use std::str::FromStr;
 
 use actix::prelude::*;
 use derive_more::Display;
@@ -11,6 +12,26 @@ pub struct Port(u16);
 // TODO: constructor, deref mby, FromStr
 #[derive(Serialize, Deserialize, Display, Debug, Default, Eq, PartialEq)]
 pub struct ContactAddr(pub String);
+
+impl Deref for ContactAddr {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        &(*self).0
+    }
+}
+
+impl From<String> for ContactAddr {
+    fn from(addr: String) -> Self {
+        ContactAddr(addr)
+    }
+}
+
+impl From<&str> for ContactAddr {
+    fn from(addr: &str) -> Self {
+        ContactAddr(addr.parse().unwrap())
+    }
+}
 
 #[derive(Message)]
 #[rtype(result = "Result<Vec<ContactAddr>, Error>")]
